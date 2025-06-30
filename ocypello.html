@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System zamówień w barze</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .order-form, .orders-list {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        input, select, button, textarea {
+            margin: 5px 0;
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .order-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        /* Nowe style dla kolorowania czasu */
+        .order-item.recent-5min {
+            background-color: #fffde7; /* Żółte podświetlenie */
+            border-left: 4px solid #ffd600;
+        }
+        
+        .order-item.recent-10min {
+            background-color: #e8f5e9; /* Zielone podświetlenie */
+            border-left: 4px solid #4caf50;
+        }
+        
+        .order-item.older {
+            background-color: #f9f9f9; /* Standardowe tło */
+        }
+        
+        .order-item h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .order-detail {
+            margin-bottom: 5px;
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .order-form, .orders-list {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="order-form">
+        <h2>Nowe zamówienie</h2>
+        <div id="orderItems">
+            <div class="order-item-form">
+                <select class="dish-select">
+                    <option value="Margherita">Margherita</option>
+                    <option value="Frytki">Frytki</option>
+                    <option value="Burger">Burger</option>
+                    <option value="Piwo">Piwo</option>
+                    <option value="Cola">Cola</option>
+                </select>
+                <input type="number" class="quantity" value="1" min="1">
+                <textarea class="note" placeholder="Notatka (opcjonalnie)"></textarea>
+            </div>
+        </div>
+        <button onclick="addAnotherItem()">Dodaj kolejną pozycję</button>
+        <button onclick="submitOrder()" style="background-color: #2196F3;">Wyślij zamówienie</button>
+    </div>
+    
+    <div class="orders-list">
+        <h2>Aktualne zamówienia</h2>
+        <div id="ordersContainer"></div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:3000/api"; // Zmień na właściwy URL swojego serwera
+        let refreshInterval;
+
+        // Automatyczne ładowanie zamówień przy starcie
+        document.addEventListener('DOMContentLoaded', function() {
+            loadOrders();
+            refreshInterval = setInterval(loadOrders, 5000); // Odśwież co 5 sekund
+        });
+
+        function addAnotherItem() {
+            const orderItems = document.getElementById('orderItems');
+            const newItem = document.createElement('div');
+            newItem.className = 'order-item-form';
+            newItem.innerHTML = `
+                <select class="dish-select">
+                    <option value="Margherita">Margherita</option>
+                    <option value="Frytki">Frytki</option>
+                </select>
+                <input type="number" class="quantity" value="1" min="1">
+                <textarea class="note" placeholder="Notatka (opcjonalnie)"></textarea>
+                <button onclick="removeItem(this)" style="background-color: #f44336;">Usuń</button>
+            `;
+            orderItems.appendChild(newItem);
+        }
+
+        function removeItem(button) {
+            button.parentElement.remove();
+        }
+
+        async function submitOrder() {
+            const items = [];
+            const itemForms = document.querySelectorAll('.order-item-form');
+            
+            itemForms.forEach(form => {
+                items.push({
+                    dish: form.querySelector('.dish-select').value,
+                    quantity: parseInt(form.querySelector('.quantity').value),
+                    note: form.querySelector('.note').value
+                });
+            });
+
+            if (items.length === 0) {
+                alert("Dodaj przynajmniej jedną pozycję do zamówienia!");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ items })
+                });
+
+                if (response.ok) {
+                    // Wyczyść formularz po wysłaniu
+                    document.getElementById('orderItems').innerHTML = `
+                        <div class="order-item-form">
+                            <select class="dish-select">
+                                <option value="Margherita">Margherita</option>
+                                <option value="Frytki">Frytki</option>
+                            </select>
+                            <input type="number" class="quantity" value="1" min="1">
+                            <textarea class="note" placeholder="Notatka (opcjonalnie)"></textarea>
+                        </div>
+                    `;
+                    loadOrders(); // Odśwież listę zamówień
+                } else {
+                    alert("Wystąpił błąd podczas wysyłania zamówienia");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Wystąpił błąd podczas wysyłania zamówienia");
+            }
+        }
+
+        async function loadOrders() {
+            try {
+                const response = await fetch(`${API_URL}/orders`);
+                const orders = await response.json();
+                displayOrders(orders);
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+        function displayOrders(orders) {
+            const container = document.getElementById('ordersContainer');
+            container.innerHTML = '';
+
+            if (orders.length === 0) {
+                container.innerHTML = '<p>Brak aktualnych zamówień</p>';
+                return;
+            }
+
+            const now = new Date();
+            
+            orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(order => {
+                const orderDate = new Date(order.createdAt);
+                const minutesDiff = Math.floor((now - orderDate) / (1000 * 60));
+                
+                let timeClass = '';
+                if (minutesDiff < 5) {
+                    timeClass = 'recent-5min';
+                } else if (minutesDiff < 10) {
+                    timeClass = 'recent-10min';
+                } else if (minutesDiff < 20) {
+                    timeClass = 'recent-20min';
+                } else {
+                    timeClass = 'older';
+                }
+
+                const orderElement = document.createElement('div');
+                orderElement.className = `order-item ${timeClass}`;
+                orderElement.innerHTML = `
+                    <h3>Zamówienie #${order._id}</h3>
+                    <div class="order-status">Status: ${order.status || 'W przygotowaniu'}</div>
+                    <div class="order-time">Złożono: ${orderDate.toLocaleString()} (${minutesDiff} min temu)</div>
+                    <div class="order-items">
+                        ${order.items.map(item => `
+                            <div class="order-detail">
+                                <strong>${item.dish}</strong> x${item.quantity}
+                                ${item.note ? `<br><em>${item.note}</em>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(orderElement);
+            });
+        }
+
+        // Inicjalizacja - wyczyść interwał przy zamknięciu strony
+        window.addEventListener('beforeunload', () => {
+            if (refreshInterval) clearInterval(refreshInterval);
+        });
+    </script>
+</body>
+</html>
